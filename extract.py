@@ -8,8 +8,8 @@
 @desc:
 """
 
-import pickle
 import subprocess as sp
+from random import random
 
 import numpy as np
 import pandas as pd
@@ -18,13 +18,17 @@ import pysam as ps
 import utils
 
 
-def extract(in_bam_file, out_bam_file, sample_size, tlen_min, mapq_cutoff):
+# nohup samtools sort -n -@ 4 -o sorted_query_name.bam sorted_coordinate.bam &
+
+def extract(in_bam_file, out_bam_file, sample_size, bed_size, tlen_min, mapq_cutoff):
     in_bam = ps.AlignmentFile(in_bam_file, 'rb')
+    utils.chrom_names = in_bam.references[:24]
+    utils.chrom_lengths = in_bam.lengths[:24]
     out_bam = ps.AlignmentFile(out_bam_file, 'wb', template=in_bam)
 
     def process_same_qname_reads(same_qname_reads):
         write = False
-        nonlocal all_num, write_num, discordant_reads_num, split_reads_num, insert_length, sample_num
+        nonlocal all_num, write_num, discordant_reads_num, split_reads_num, insert_length, sample_num, beds, bed_num
         all_num += 1
         if any([read.reference_name not in utils.chrom_names or read.is_unmapped or read.is_qcfail or read.is_duplicate
                 for read in same_qname_reads]):
@@ -37,9 +41,12 @@ def extract(in_bam_file, out_bam_file, sample_size, tlen_min, mapq_cutoff):
                         discordant_reads_num += 1
                         write = True
                     else:
-                        if sample_num <= sample_size:
+                        if sample_num < sample_size and random() > 0.1:
                             insert_length.append(abs(same_qname_reads[0].tlen))
                             sample_num += 1
+                        if bed_num < bed_size and random() > 0.1:
+                            beds.append(utils.to_interval(same_qname_reads[0]))
+                            bed_num += 1
 
             elif len(same_qname_reads) == 3:
                 read_1 = [read for read in same_qname_reads if read.is_read1]
@@ -63,7 +70,8 @@ def extract(in_bam_file, out_bam_file, sample_size, tlen_min, mapq_cutoff):
             for read in same_qname_reads:
                 out_bam.write(read)
 
-    all_num = write_num = discordant_reads_num = split_reads_num = sample_num = 0
+    all_num = write_num = discordant_reads_num = split_reads_num = sample_num = bed_num = 0
+    beds = []
     insert_length = []
     temp_read = next(in_bam)
     query_name = temp_read.query_name
@@ -84,7 +92,7 @@ def extract(in_bam_file, out_bam_file, sample_size, tlen_min, mapq_cutoff):
     print(f"all {all_num}\nextract {write_num}\n"
           f"discordant_reads {discordant_reads_num}\nsplit_reads {split_reads_num}\n"
           f"insert length mean {mean} std {std}")
-    return mean, std
+    return mean, std, beds
 
 
 def cluster(extracted_file, cluster_distance):
@@ -130,6 +138,4 @@ def split_interval(peaks_file, cores):
             split_peaks[counter].append([interval.chrom, interval.start, interval.end])
             counter += 1
     print(f"after split {len(split_peaks)} chunks {sum([len(i) for i in split_peaks])} intervals")
-    with open("split_peaks.pickle", 'wb') as f:
-        pickle.dump(split_peaks, f)
     return split_peaks

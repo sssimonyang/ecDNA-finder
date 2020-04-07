@@ -9,7 +9,6 @@
 """
 
 import itertools as it
-import os
 from collections import namedtuple
 
 import pandas as pd
@@ -21,21 +20,19 @@ Read = namedtuple("Read",
 opposite = {'right': 'left', 'left': 'right'}
 mapq_cutoff = 40
 interval_p_cutoff = 0.5
-sample_size = 100000
+sample_size = 1000000
+bed_size = 10000
 tlen_min = 5000
+std = 4
+cluster_distance = 200
+
+# calculate automaticly
+cores = 4
 extension = 1000
 insert_mean = 500
 insert_std = 100
-std = 4
-cluster_distance = 200
-pid = str(os.getpid())
-cores = 4
-bam_file = '/public/home/zhangjing1/yangjk/ecDNA/data/sorted_query_name.bam'
-bam = ps.AlignmentFile(bam_file, 'rb')
-chrom_names = bam.references[:24]
-chrom_lengths = bam.lengths[:24]
-bam.close()
-del bam, bam_file
+chrom_names = []
+chrom_lengths = []
 
 
 def colinear(read, read_mate, supplementary):
@@ -261,7 +258,7 @@ def to_interval(interval):
     if isinstance(interval, ps.libcalignedsegment.AlignedSegment):
         out = Interval(chrom=interval.reference_name, start=interval.reference_start, end=interval.reference_end,
                        strand='-' if interval.is_reverse else '+')
-        out.read = interval
+        out.read = show_reads([interval])[0]
         return out
     if isinstance(interval, list):
         return Interval(chrom=interval[0], start=interval[1], end=interval[2])
@@ -332,9 +329,9 @@ def assign_discordant_reads(split_read_mates, discordant_reads):
             read1 = to_interval(read1)
             read2 = to_interval(read2)
             if split_read_mate.interval1.contain(read1) and split_read_mate.interval2.contain(read2):
-                split_read_mate.support_discordant_reads.append(show_reads([read1.read])[0])
+                split_read_mate.support_discordant_reads.append(read1.read)
             elif split_read_mate.interval1.contain(read2) and split_read_mate.interval2.contain(read1):
-                split_read_mate.support_discordant_reads.append(show_reads([read2.read])[0])
+                split_read_mate.support_discordant_reads.append(read2.read)
     return split_read_mates
 
 
@@ -376,9 +373,15 @@ def get_longest_soft_clipped_bases(reads):
 class LongInterval(Interval):
     def __init__(self, interval, clipped, mate):
         self.interval = interval
-        super().__init__(self, interval.chrom, interval.start, interval.end)
+        super().__init__(interval.chrom, interval.start, interval.end)
         self.clipped = clipped
         self.mate = mate
         self.raw_coverage = 0.0
         self.other_long_interval = None
         self.extend_coverage = []
+
+
+class WholeInterval(Interval):
+    def __init__(self, chrom, start, end, strand, coverages):
+        super().__init__(chrom, start, end, strand)
+        self.coverages = coverages
