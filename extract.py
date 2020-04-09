@@ -18,11 +18,13 @@ import pysam as ps
 import utils
 
 
-# nohup samtools sort -n -@ 4 -o sorted_query_name.bam sorted_coordinate.bam &
-
 def extract(in_bam_file, out_bam_file, sample_size, bed_size, tlen_min, mapq_cutoff):
     in_bam = ps.AlignmentFile(in_bam_file, 'rb')
     utils.chrom_names = in_bam.references[:24]
+    if 'chr' in utils.chrom_names[0]:
+        utils.chrom_tag = True
+    else:
+        utils.chrom_tag = False
     utils.chrom_lengths = in_bam.lengths[:24]
     out_bam = ps.AlignmentFile(out_bam_file, 'wb', template=in_bam)
 
@@ -96,9 +98,7 @@ def extract(in_bam_file, out_bam_file, sample_size, bed_size, tlen_min, mapq_cut
 
 
 def cluster(extracted_file, cluster_distance):
-    # samtools sort -n -o sorted_query_name_extracted.bam extracted.bam
     # samtools sort -o sorted_coordinate_name_extracted.bam extracted.bam
-    sp.call(f"samtools sort -n -o sorted_query_name_{extracted_file} {extracted_file}", shell=True)
     sp.call(f"samtools sort -o sorted_coordinate_{extracted_file} {extracted_file}", shell=True)
     sp.call(f"samtools index sorted_coordinate_{extracted_file}", shell=True)
     sp.call(
@@ -138,4 +138,5 @@ def split_interval(peaks_file, cores):
             split_peaks[counter].append([interval.chrom, interval.start, interval.end])
             counter += 1
     print(f"after split {len(split_peaks)} chunks {sum([len(i) for i in split_peaks])} intervals")
+    sp.call(f"rm {peaks_file}", shell=True)
     return split_peaks

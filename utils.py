@@ -7,10 +7,10 @@
 @time: 2020/3/11 20:03
 @desc:
 """
-
 import itertools as it
 from collections import namedtuple
 
+import numpy as np
 import pandas as pd
 import pysam as ps
 
@@ -26,13 +26,14 @@ tlen_min = 5000
 std = 4
 cluster_distance = 200
 
-# calculate automaticly
+# calculate automaticly or infer from the given bam
 cores = 4
 extension = 1000
 insert_mean = 500
 insert_std = 100
 chrom_names = []
 chrom_lengths = []
+chrom_tag = False
 
 
 def colinear(read, read_mate, supplementary):
@@ -223,7 +224,8 @@ class Interval:
         assert strand in ['+', '-', '']
         self.strand = strand
         self.read = None
-        self.coverage = None
+        self.depth = None
+        self.length = self.end - self.start
 
     def contain(self, interval):
         if self.chrom == interval.chrom and self.start <= interval.start and self.end >= interval.end:
@@ -376,12 +378,47 @@ class LongInterval(Interval):
         super().__init__(interval.chrom, interval.start, interval.end)
         self.clipped = clipped
         self.mate = mate
-        self.raw_coverage = 0.0
+        self.raw_depth = 0.0
         self.other_long_interval = None
-        self.extend_coverage = []
+        self.extend_depth = []
 
 
 class WholeInterval(Interval):
-    def __init__(self, chrom, start, end, strand, coverages):
+    def __init__(self, chrom, start, end, strand, depths):
         super().__init__(chrom, start, end, strand)
-        self.coverages = coverages
+        self.depths = depths
+        self.left_depth = None
+        self.right_depth = None
+        self.depth_average = np.average(self.depths)
+        self.supports = []
+
+
+def circ_result_out(circ_results, chrom_tag=False):
+    out = []
+    for i, circ in enumerate(circ_results):
+        for interval, mate in zip(circ[0], circ[1]):
+            if chrom_tag:
+                chrom = interval.chrom
+            else:
+                chrom = 'chr' + interval.chrom
+            out.append([chrom, interval.start, interval.end, interval.strand, interval.depth_average,
+                        interval.left_depth, interval.right_depth,
+                        len(mate.support_split_reads),
+                        len(mate.support_discordant_reads), len(interval.supports), i + 1])
+    out = pd.DataFrame(out, columns=['chrom', 'start', 'end', 'strand', 'average_depth', 'left_depth', 'right_depth',
+                                     'support_split_reads', 'support_discordant_reads', 'support_left_right_link',
+                                     'circ_id'])
+    out.to_csv('circ_results.tsv', sep='\t', index=False)
+
+
+def find_support_discordant_mates(two_side_intervals, discordant_mates):
+    interval1 = two_side_intervals[0]
+    interval2 = two_side_intervals[1]
+    supports = []
+    for discordant_mate in discordant_mates:
+        read1 = discordant_mate.interval1
+        read2 = discordant_mate.interval2
+        if (interval1.contain(read1) and interval2.contain(read2)) or \
+                (interval2.contain(read1) and interval1.contain(read2)):
+            supports.append(discordant_mate)
+    return supports

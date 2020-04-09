@@ -8,6 +8,7 @@
 @desc:
 """
 
+import argparse
 import multiprocessing as mp
 import os
 import pickle
@@ -18,9 +19,12 @@ import mates
 import utils
 from ecdna import ECDNA
 
+parser = argparse.ArgumentParser(description="ecDNA-finder")
+parser.add_argument('-d', '--rundir', help='your run directory')
+args = parser.parse_args()
+
 # prepare
-data_dir_name = 'test'
-os.chdir(os.path.join("/public/home/zhangjing1/yangjk/ecDNA/data/", data_dir_name))
+os.chdir(os.path.join("/public/home/zhangjing1/yangjk/ecDNA/data/", args.rundir))
 sorted_query_name_bam_file = 'sorted_query_name.bam'
 sorted_coordinate_bam_file = 'sorted_coordinate.bam'
 extracted_file = 'extracted.bam'
@@ -61,10 +65,21 @@ discordant_mates.sort(key=lambda i: len(i.support_discordant_reads), reverse=Tru
 # assemble
 ecdna = ECDNA(sorted_coordinate_bam_file, split_read_mates, discordant_mates, beds)
 circ_results, not_circ_results = ecdna.assemble()
+print(circ_results)
+print(not_circ_results)
+utils.circ_result_out(circ_results, chrom_tag=utils.chrom_tag)
+
+# analyse
+
 
 # write output
 print(f"after process, {len(split_read_mates)} sr mates, {len(discordant_mates)} discordant mates")
-with open("results.pickle", 'wb') as f:
+os.mkdir('temp')
+with open("temp/ecdna_finder_temp.pickle", 'wb') as f:
+    pickle.dump([ecdna.depth_median, ecdna.depth_average,
+                 ecdna.depth_std, split_read_mates, discordant_mates], f)
+# 2020.04.08 write fail
+with open("temp/ecdna_finder_result.pickle", 'wb') as f:
     pickle.dump([circ_results, not_circ_results], f)
 print('write success')
 end = time.localtime()
