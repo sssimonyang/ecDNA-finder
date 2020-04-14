@@ -105,7 +105,8 @@ class Mates:
                     if support_clipped_reads:
                         remap_info = utils.get_longest_soft_clipped_bases(support_clipped_reads)
                         if remap_info[1] >= 10:
-                            print(f'{remap_info[2].query_name} need remap {interval} {mate_interval}')
+                            pass
+                            # print(f'{remap_info[2].query_name} need remap {interval} {mate_interval}')
                             # todo edlib 利用remap_info remap获得sr_mate both = True时考虑双向
                 if iteration_split_read_mates:
                     iteration_split_read_mates = utils.process_sr_mate(iteration_split_read_mates)

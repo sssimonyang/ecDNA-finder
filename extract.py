@@ -21,10 +21,6 @@ import utils
 def extract(in_bam_file, out_bam_file, sample_size, bed_size, tlen_min, mapq_cutoff):
     in_bam = ps.AlignmentFile(in_bam_file, 'rb')
     utils.chrom_names = in_bam.references[:24]
-    if 'chr' in utils.chrom_names[0]:
-        utils.chrom_tag = True
-    else:
-        utils.chrom_tag = False
     utils.chrom_lengths = in_bam.lengths[:24]
     out_bam = ps.AlignmentFile(out_bam_file, 'wb', template=in_bam)
 
@@ -108,26 +104,27 @@ def cluster(extracted_file, cluster_distance):
     return f"sorted_coordinate_{extracted_file}", 'peaks.bed'
 
 
-def split_interval(peaks_file, cores):
+def split_interval(peaks_file, cutoff, cores):
     peaks = pd.read_csv(peaks_file, sep='\t', names=['chrom', 'start', 'end', 'value'],
                         dtype={'chrom': 'str', 'start': 'int', 'end': 'int', 'value': 'float'})
+    peaks = peaks[peaks.value > cutoff]
     print(f"interval {peaks.shape[0]}")
-    chunks = cores * 100
+    chunks = cores * 10
     counter = 0
     split_peaks = []
     for i in range(0, chunks):
         split_peaks.append([])
-
+    # todo modify
     for _, interval in peaks.iterrows():
         if counter == chunks:
             counter = 0
         interval.start = interval.start - 100
         interval.end = interval.end + 100
-        if interval.end - interval.start > 500:
+        if interval.end - interval.start > 700:
             w_start = interval.start
             while w_start < interval.end:
-                splitted = [interval.chrom, w_start, w_start + 300]
-                w_start += 300
+                splitted = [interval.chrom, w_start, w_start + 500]
+                w_start += 500
                 if counter == chunks:
                     counter = 0
                     split_peaks[counter].append(splitted)
@@ -138,5 +135,5 @@ def split_interval(peaks_file, cores):
             split_peaks[counter].append([interval.chrom, interval.start, interval.end])
             counter += 1
     print(f"after split {len(split_peaks)} chunks {sum([len(i) for i in split_peaks])} intervals")
-    sp.call(f"rm {peaks_file}", shell=True)
+    # sp.call(f"rm {peaks_file}", shell=True)
     return split_peaks

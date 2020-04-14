@@ -7,6 +7,7 @@
 @time: 2020/3/11 20:03
 @desc:
 """
+import itertools
 import itertools as it
 from collections import namedtuple
 
@@ -24,8 +25,11 @@ sample_size = 1000000
 bed_size = 10000
 tlen_min = 5000
 std = 4
+extend_size = 10000
 cluster_distance = 200
-
+peak_value_cutoff = 5
+split_read_cutoff = 5
+discordant_read_cutoff = 10
 # calculate automaticly or infer from the given bam
 cores = 4
 extension = 1000
@@ -33,7 +37,6 @@ insert_mean = 500
 insert_std = 100
 chrom_names = []
 chrom_lengths = []
-chrom_tag = False
 
 
 def colinear(read, read_mate, supplementary):
@@ -167,6 +170,18 @@ class SR_Mate:
                 ' '.join([read.query_name for read in self.support_discordant_reads]),
                 ' '.join([str(discordant_mate) for discordant_mate in self.support_discordant_mates])]
 
+    def get_points(self):
+        points = []
+        if self.clipped1 == 'left':
+            points.append(Point(self.interval1.chrom, self.interval1.start, 'left'))
+        else:
+            points.append(Point(self.interval1.chrom, self.interval1.end, 'right'))
+        if self.clipped2 == 'left':
+            points.append(Point(self.interval2.chrom, self.interval2.start, 'left'))
+        else:
+            points.append(Point(self.interval2.chrom, self.interval2.end, 'right'))
+        return points
+
 
 class Discordant_Mate:
     def __init__(self, interval1, interval2):
@@ -225,7 +240,6 @@ class Interval:
         self.strand = strand
         self.read = None
         self.depth = None
-        self.length = self.end - self.start
 
     def contain(self, interval):
         if self.chrom == interval.chrom and self.start <= interval.start and self.end >= interval.end:
@@ -233,8 +247,11 @@ class Interval:
         else:
             return False
 
+    def length(self):
+        return self.end - self.start
+
     def __repr__(self):
-        return ','.join([self.chrom, str(self.start), str(self.end)])
+        return self.__class__.__name__ + ' ' + ','.join([self.chrom, str(self.start), str(self.end)])
 
     __str__ = __repr__
 
@@ -389,19 +406,15 @@ class WholeInterval(Interval):
         self.depths = depths
         self.left_depth = None
         self.right_depth = None
-        self.depth_average = np.average(self.depths)
+        self.depth = np.average(self.depths)
         self.supports = []
 
 
-def circ_result_out(circ_results, chrom_tag=False):
+def circ_result_out(circ_results):
     out = []
     for i, circ in enumerate(circ_results):
         for interval, mate in zip(circ[0], circ[1]):
-            if chrom_tag:
-                chrom = interval.chrom
-            else:
-                chrom = 'chr' + interval.chrom
-            out.append([chrom, interval.start, interval.end, interval.strand, interval.depth_average,
+            out.append([interval.chrom, interval.start, interval.end, interval.strand, interval.depth_average,
                         interval.left_depth, interval.right_depth,
                         len(mate.support_split_reads),
                         len(mate.support_discordant_reads), len(interval.supports), i + 1])
@@ -422,3 +435,34 @@ def find_support_discordant_mates(two_side_intervals, discordant_mates):
                 (interval2.contain(read1) and interval1.contain(read2)):
             supports.append(discordant_mate)
     return supports
+
+
+class Point:
+    def __init__(self, chrom, point, clipped):
+        self.chrom = chrom
+        self.point = point
+        self.clipped = clipped
+
+    def similar(self, point):
+        if self.chrom == point.chrom and abs(self.point - point.point) <= 10 and self.clipped == point.clipped:
+            return True
+        else:
+            return False
+
+    def __repr__(self):
+        return self.__class__.__name__ + ' ,'.join([self.chrom, str(self.point), str(self.clipped)])
+
+    __str__ = __repr__
+
+
+def process_all_sr_mates(split_read_mates):
+    removes = []
+    for sr_mate1, sr_mate2 in itertools.combinations(split_read_mates, 2):
+        points1 = sr_mate1.get_points()
+        points2 = sr_mate2.get_points()
+        if (points1[0].similar(points2[1]) and points1[1].similar(points2[0])) or (
+                points1[0].similar(points2[0]) and points1[1].similar(points2[1])):
+            removes.append(sr_mate2)
+    split_read_mates = [split_read_mate for split_read_mate in split_read_mates
+                        if split_read_mate not in removes]
+    return split_read_mates
