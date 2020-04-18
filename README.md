@@ -1,18 +1,19 @@
 ### prepare
 Make a directory
-The directory needs a coordinate-sorted bam file named `sorted_coordinate.bam` and a queryname=sorted bam file named `sorted_query_name.bam`
-Use follow commands to tranform a coordinate-sorted bam file to queryname-sorted
+
+The directory needs a coordinate-sorted bam file named `sorted_coordinate.bam` and a queryname-sorted bam file named `sorted_query_name.bam`
+
+Use follow commands to transform a coordinate-sorted bam file to queryname-sorted
 ```shell script
 samtools sort -@ {threads_num} -o sorted_coordinate.bam sorted_coordinate.bam
 ```
-
+-------------------------
 ### run
 change working directory and run
 ```shell script
 /public/home/liuxs/anaconda3/envs/ecDNA/bin/python /public/home/zhangjing1/yangjk/ecDNA/code/main.py
 ```
-
-
+-------------------------------
 ### pbs_file
 ```shell script
 #!/bin/sh
