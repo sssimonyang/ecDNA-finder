@@ -414,7 +414,7 @@ def circ_result_out(circ_results):
     out = []
     for i, circ in enumerate(circ_results):
         for interval, mate in zip(circ[0], circ[1]):
-            out.append([interval.chrom, interval.start, interval.end, interval.strand, interval.depth_average,
+            out.append([interval.chrom, interval.start, interval.end, interval.strand, interval.depth,
                         interval.left_depth, interval.right_depth,
                         len(mate.support_split_reads),
                         len(mate.support_discordant_reads), len(interval.supports), i + 1])

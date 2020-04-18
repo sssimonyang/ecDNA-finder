@@ -76,7 +76,7 @@ print(f"after process, {len(split_read_mates)} sr mates, {len(discordant_mates)}
 ecdna = ECDNA(sorted_coordinate_bam_file, split_read_mates, discordant_mates, beds, max_insert=utils.extension,
               extend_size=utils.extend_size)
 with open("temp/ecdna_finder_temp.pickle", 'wb') as f:
-    pickle.dump([ecdna.depth_median, ecdna.depth_average,
+    pickle.dump([ecdna.depth_average, ecdna.depth_average,
                  ecdna.depth_std, split_read_mates, discordant_mates], f)
 circ_results, not_circ_results = ecdna.assemble()
 utils.circ_result_out(circ_results)

@@ -135,10 +135,11 @@ class ECDNA:
         if current_interval.clipped == "left" and intersect_interval.clipped == 'right':
             interval = utils.WholeInterval(current_interval.chrom, current_interval.start, intersect_interval.end,
                                            strand='+', depths=current_interval.extend_depth)
+            return interval
         if current_interval.clipped == "right" and intersect_interval.clipped == 'left':
             interval = utils.WholeInterval(current_interval.chrom, intersect_interval.start, current_interval.end,
                                            strand='-', depths=current_interval.extend_depth)
-        return interval
+            return interval
 
     def interval_depth(self, interval):
         depth = sum([sum(a) for a in self.bam.count_coverage(interval.chrom, interval.start, interval.end)]) / (
