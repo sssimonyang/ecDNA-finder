@@ -37,7 +37,7 @@ class Mates:
             for _, mate_interval in realignment_interval_extended.iterrows():
                 mate_interval = utils.to_interval(mate_interval)
                 iteration_split_read_mates = []
-                support_discordant_reads = [read for read in
+                support_discordant_reads = [(read, extracted_bam.mate(read)) for read in
                                             extracted_bam.fetch(interval.chrom, interval.start, interval.end)
                                             if mate_interval.contain(utils.to_interval(extracted_bam.mate(read)))]
                 if len(support_discordant_reads) <= 1:
@@ -62,7 +62,7 @@ class Mates:
 
                 if discordant:
                     discordant_mate = utils.Discordant_Mate(interval, mate_interval)
-                    discordant_mate.support_discordant_reads = utils.show_reads(support_discordant_reads)
+                    discordant_mate.support_discordant_reads = utils.show_mates(support_discordant_reads, sr=False)
                     discordant_mates.append(discordant_mate)
                     continue
 
@@ -99,7 +99,7 @@ class Mates:
                                                                   '-' if read.is_reverse else '+')
                             split_read_mate = utils.SR_Mate(interval_primary, clipped_primary,
                                                             interval_supplementary, clipped_supplementary)
-                            split_read_mate.from_read = utils.show_reads([read])[0]
+                            split_read_mate.from_read = utils.show_mates([(read, supplementary)], sr=True)[0]
                             iteration_split_read_mates.append(split_read_mate)
                 else:
                     if support_clipped_reads:
@@ -111,15 +111,10 @@ class Mates:
                 if iteration_split_read_mates:
                     iteration_split_read_mates = utils.process_sr_mate(iteration_split_read_mates)
 
-                discordant_reads = []
-                for read in support_discordant_reads:
-                    read_mate = extracted_bam.mate(read)
-                    if read_mate.mapping_quality > self.mapq_cutoff:
-                        discordant_reads.append([read, read_mate])
-
                 # second pass to add discordant read info
                 if iteration_split_read_mates:
-                    split_read_mates.extend(utils.assign_discordant_reads(iteration_split_read_mates, discordant_reads))
+                    split_read_mates.extend(
+                        utils.assign_discordant_reads(iteration_split_read_mates, support_discordant_reads))
 
         extracted_bam.close()
         return

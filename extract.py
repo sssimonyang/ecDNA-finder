@@ -43,7 +43,9 @@ def extract(in_bam_file, out_bam_file, sample_size, bed_size, tlen_min, mapq_cut
                             insert_length.append(abs(same_qname_reads[0].tlen))
                             sample_num += 1
                         if bed_num < bed_size and random() > 0.1:
-                            beds.append(utils.to_interval(same_qname_reads[0]))
+                            beds.append(utils.Interval(chrom=same_qname_reads[0].reference_name,
+                                                       start=same_qname_reads[0].reference_start,
+                                                       end=same_qname_reads[0].reference_end))
                             bed_num += 1
 
             elif len(same_qname_reads) == 3:
@@ -107,8 +109,8 @@ def cluster(extracted_file, cluster_distance):
 def split_interval(peaks_file, cutoff, cores):
     peaks = pd.read_csv(peaks_file, sep='\t', names=['chrom', 'start', 'end', 'value'],
                         dtype={'chrom': 'str', 'start': 'int', 'end': 'int', 'value': 'float'})
-    peaks = peaks[peaks.value > cutoff]
-    print(f"interval {peaks.shape[0]}")
+    peaks = peaks[peaks.value >= cutoff]
+    print(f"all interval {peaks.shape[0]}, cutoff {cutoff}")
     chunks = cores * 10
     counter = 0
     split_peaks = []
@@ -120,7 +122,7 @@ def split_interval(peaks_file, cutoff, cores):
             counter = 0
         interval.start = interval.start - 100
         interval.end = interval.end + 100
-        if interval.end - interval.start > 700:
+        if interval.end - interval.start > 500:
             w_start = interval.start
             while w_start < interval.end:
                 splitted = [interval.chrom, w_start, w_start + 500]
@@ -137,3 +139,22 @@ def split_interval(peaks_file, cutoff, cores):
     print(f"after split {len(split_peaks)} chunks {sum([len(i) for i in split_peaks])} intervals")
     # sp.call(f"rm {peaks_file}", shell=True)
     return split_peaks
+
+
+def compute_depth(bam_file, beds):
+    bam = ps.AlignmentFile(bam_file, 'rb')
+
+    def interval_depth(interval):
+        depth = sum([sum(a) for a in bam.count_coverage(interval.chrom, interval.start, interval.end)]) / (
+                interval.end - interval.start)
+        return depth
+
+    depths = []
+    for i in beds:
+        depths.append(interval_depth(i))
+    median_depth = np.median(depths)
+    filter_depth = [c for c in depths if c < 2 * median_depth]
+    depth_average = np.average(filter_depth)
+    depth_std = np.std(filter_depth)
+    print(f"depth average {depth_average}, std {depth_std}")
+    return depth_average, depth_std

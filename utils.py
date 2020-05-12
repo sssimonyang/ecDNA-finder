@@ -18,23 +18,34 @@ import pysam as ps
 Read = namedtuple("Read",
                   ['query_name', 'reference_name', 'reference_start', 'reference_end', 'strand', 'query_sequence'])
 
+ReadMate = namedtuple("ReadMate",
+                      ['type', 'read1', 'read2'])
 opposite = {'right': 'left', 'left': 'right'}
+# cutoff
 mapq_cutoff = 40
 interval_p_cutoff = 0.5
+
+# number
 sample_size = 1000000
 bed_size = 10000
-tlen_min = 5000
 std = 4
+
+# bp
 extend_size = 10000
 cluster_distance = 200
-peak_value_cutoff = 5
-split_read_cutoff = 5
-discordant_read_cutoff = 10
+tlen_min = 5000
+
 # calculate automaticly or infer from the given bam
 cores = 4
-extension = 1000
+extension = 900
 insert_mean = 500
 insert_std = 100
+depth_average = 60
+depth_std = 20
+
+peak_value_cutoff = 6
+split_read_cutoff = 3
+discordant_read_cutoff = 3
 chrom_names = []
 chrom_lengths = []
 
@@ -135,10 +146,21 @@ class SA:
             return self.start
 
 
-def show_reads(reads):
-    return [Read(read.query_name, read.reference_name, read.reference_start, read.reference_end,
-                 "-" if read.is_reverse else '+',
-                 read.query_sequence) for read in reads]
+def show_mates(reads, sr):
+    if sr:
+        return [ReadMate('SR', Read(read.query_name, read.reference_name, read.reference_start, read.reference_end,
+                                    "-" if read.is_reverse else '+',
+                                    read.query_sequence),
+                         Read(read.query_name, mate.chrom, mate.start, mate.end,
+                              "-" if mate.is_reverse else '+',
+                              read.query_sequence)) for read, mate in reads]
+    else:
+        return [ReadMate('DR', Read(read.query_name, read.reference_name, read.reference_start, read.reference_end,
+                                    "-" if read.is_reverse else '+',
+                                    read.query_sequence),
+                         Read(mate.query_name, mate.reference_name, mate.reference_start, mate.reference_end,
+                              "-" if mate.is_reverse else '+',
+                              mate.query_sequence)) for read, mate in reads]
 
 
 def phred_to_prob(values):
@@ -238,7 +260,6 @@ class Interval:
         self.end = int(end)
         assert strand in ['+', '-', '']
         self.strand = strand
-        self.read = None
         self.depth = None
 
     def contain(self, interval):
@@ -277,7 +298,6 @@ def to_interval(interval):
     if isinstance(interval, ps.libcalignedsegment.AlignedSegment):
         out = Interval(chrom=interval.reference_name, start=interval.reference_start, end=interval.reference_end,
                        strand='-' if interval.is_reverse else '+')
-        out.read = show_reads([interval])[0]
         return out
     if isinstance(interval, list):
         return Interval(chrom=interval[0], start=interval[1], end=interval[2])
@@ -345,12 +365,13 @@ def get_realignment_intervals(intervals, interval_p_cutoff=0.5):
 def assign_discordant_reads(split_read_mates, discordant_reads):
     for split_read_mate in split_read_mates:
         for read1, read2 in discordant_reads:
-            read1 = to_interval(read1)
-            read2 = to_interval(read2)
-            if split_read_mate.interval1.contain(read1) and split_read_mate.interval2.contain(read2):
-                split_read_mate.support_discordant_reads.append(read1.read)
-            elif split_read_mate.interval1.contain(read2) and split_read_mate.interval2.contain(read1):
-                split_read_mate.support_discordant_reads.append(read2.read)
+            read1_interval = to_interval(read1)
+            read2_interval = to_interval(read2)
+            if split_read_mate.interval1.contain(read1_interval) and split_read_mate.interval2.contain(read2_interval):
+                split_read_mate.support_discordant_reads.append(show_mates([(read1, read2)], sr=False)[0])
+            elif split_read_mate.interval1.contain(read2_interval) and split_read_mate.interval2.contain(
+                    read1_interval):
+                split_read_mate.support_discordant_reads.append(show_mates([(read1, read2)], sr=False)[0])
     return split_read_mates
 
 
@@ -422,6 +443,29 @@ def circ_result_out(circ_results):
                                      'support_split_reads', 'support_discordant_reads', 'support_left_right_link',
                                      'circ_id'])
     out.to_csv('circ_results.tsv', sep='\t', index=False)
+
+
+def not_circ_result_out(not_circ_results):
+    out = []
+    for i, not_circ in enumerate(not_circ_results):
+        not_circ_interval = not_circ[0][-1]
+        circ_interval = not_circ[0][:-1]
+        circ_support = not_circ[1]
+        assert len(circ_interval) == len(circ_support)
+        for interval, mate in zip(circ_interval, circ_support):
+            out.append([interval.chrom, interval.start, interval.end, interval.strand, interval.depth,
+                        interval.left_depth, interval.right_depth,
+                        len(mate.support_split_reads),
+                        len(mate.support_discordant_reads), len(interval.supports), i + 1])
+        interval = not_circ_interval
+        out.append([interval.chrom, interval.start, interval.end, interval.strand, interval.depth,
+                    interval.left_depth, interval.right_depth,
+                    0, 0, len(interval.supports), i + 1])
+
+    out = pd.DataFrame(out, columns=['chrom', 'start', 'end', 'strand', 'average_depth', 'left_depth', 'right_depth',
+                                     'support_split_reads', 'support_discordant_reads', 'support_left_right_link',
+                                     'circ_id'])
+    out.to_csv('not_circ_results.tsv', sep='\t', index=False)
 
 
 def find_support_discordant_mates(two_side_intervals, discordant_mates):
