@@ -44,7 +44,8 @@ utils.insert_mean, utils.insert_std, beds = extract.extract(sorted_query_name_ba
                                                             bed_size=utils.bed_size, tlen_min=utils.tlen_min,
                                                             mapq_cutoff=utils.mapq_cutoff)
 utils.depth_average, utils.depth_std = extract.compute_depth(sorted_coordinate_bam_file, beds)
-utils.peak_value_cutoff = round(utils.depth_average / 20) or 1
+### 谨慎更改
+utils.peak_value_cutoff = round(utils.depth_average / 10) or 1
 utils.extension = utils.insert_mean + utils.std * utils.insert_std
 extracted_coordinate_file, peaks_file = extract.cluster(extracted_file, cluster_distance=utils.cluster_distance)
 split_peaks = extract.split_interval(peaks_file, cutoff=utils.peak_value_cutoff, cores=utils.cores)

@@ -286,10 +286,11 @@ class Interval:
         return True
 
     def intersects(self, intervals):
+        intersect_interval = []
         for interval in intervals:
             if self.intersect(interval):
-                return interval
-        return None
+                intersect_interval.append(interval)
+        return intersect_interval
 
 
 def to_interval(interval):
@@ -435,13 +436,17 @@ def circ_result_out(circ_results):
     out = []
     for i, circ in enumerate(circ_results):
         for interval, mate in zip(circ[0], circ[1]):
-            out.append([interval.chrom, interval.start, interval.end, interval.strand, interval.depth,
-                        interval.left_depth, interval.right_depth,
-                        len(mate.support_split_reads),
-                        len(mate.support_discordant_reads), len(interval.supports), i + 1])
-    out = pd.DataFrame(out, columns=['chrom', 'start', 'end', 'strand', 'average_depth', 'left_depth', 'right_depth',
-                                     'support_split_reads', 'support_discordant_reads', 'support_left_right_link',
-                                     'circ_id'])
+            out.append(
+                [interval.chrom, interval.start, interval.end, interval.strand, interval.length(),
+                 interval.depth, interval.left_depth, interval.right_depth,
+                 len(mate.support_split_reads),
+                 len(mate.support_discordant_reads), len(interval.supports), i + 1])
+
+    out = pd.DataFrame(out, columns=['chrom', 'start', 'end', 'strand', 'length', 'average_depth', 'left_depth',
+                                     'right_depth', 'support_split_reads', 'support_discordant_reads',
+                                     'support_left_right_link', 'circ_id'])
+    out.drop_duplicates(subset=['chrom', 'start', 'end'],
+                        keep='first', inplace=True)
     out.to_csv('circ_results.tsv', sep='\t', index=False)
 
 
@@ -453,18 +458,19 @@ def not_circ_result_out(not_circ_results):
         circ_support = not_circ[1]
         assert len(circ_interval) == len(circ_support)
         for interval, mate in zip(circ_interval, circ_support):
-            out.append([interval.chrom, interval.start, interval.end, interval.strand, interval.depth,
-                        interval.left_depth, interval.right_depth,
-                        len(mate.support_split_reads),
-                        len(mate.support_discordant_reads), len(interval.supports), i + 1])
+            out.append(
+                [interval.chrom, interval.start, interval.end, interval.strand, interval.length(),
+                 interval.depth, interval.left_depth, interval.right_depth,
+                 len(mate.support_split_reads),
+                 len(mate.support_discordant_reads), len(interval.supports), i + 1])
         interval = not_circ_interval
-        out.append([interval.chrom, interval.start, interval.end, interval.strand, interval.depth,
-                    interval.left_depth, interval.right_depth,
+        out.append([interval.chrom, interval.start, interval.end, interval.strand, interval.length(),
+                    interval.depth, interval.left_depth, interval.right_depth,
                     0, 0, len(interval.supports), i + 1])
 
-    out = pd.DataFrame(out, columns=['chrom', 'start', 'end', 'strand', 'average_depth', 'left_depth', 'right_depth',
-                                     'support_split_reads', 'support_discordant_reads', 'support_left_right_link',
-                                     'circ_id'])
+    out = pd.DataFrame(out, columns=['chrom', 'start', 'end', 'strand', 'length', 'average_depth', 'left_depth',
+                                     'right_depth', 'support_split_reads', 'support_discordant_reads',
+                                     'support_left_right_link', 'circ_id'])
     out.to_csv('not_circ_results.tsv', sep='\t', index=False)
 
 

@@ -25,129 +25,121 @@ class ECDNA:
         self.depth_std = depth_std
         self.max_insert = max_insert
         self.extend_size = extend_size
-        self.upper_limit = self.depth_average + 2 * self.depth_std
+        self.upper_limit = round(self.depth_average + 1.5 * self.depth_std)
 
-        self.split_read_cutoff = round(self.depth_average / 20) or 1
+        self.split_read_cutoff = round(self.depth_average / 30) or 1
         self.discordant_read_cutoff = self.split_read_cutoff * 2
         print(f"split_read_cutoff {self.split_read_cutoff}, discordant_read_cutoff {self.discordant_read_cutoff}")
         self.filter()
 
         self.long_intervals = []
+        self.mates = []
         self.build_long_intervals()
 
     def assemble(self):
         results = []
-        long_intervals = copy.copy(self.long_intervals)
-        while long_intervals:
-            long_interval = long_intervals.pop()
-            current_result = []
-            current_support_mates = []
-            other_long_interval = long_interval.other_long_interval
-            current_interval = long_interval
-            extend = True
-            while extend:
-                extend_interval = self.interval_extend(current_interval, self.extend_size)
-                intersect_interval = extend_interval.intersects(long_intervals)
-                if intersect_interval and intersect_interval.clipped == utils.opposite[current_interval.clipped]:
-                    if intersect_interval.clipped == 'left':
-                        current_interval.extend_depth.append(
-                            self.interval_depth(utils.Interval(intersect_interval.chrom, intersect_interval.start,
-                                                               extend_interval.end)))
+        while self.mates:
+            long_interval1, long_interval2, first_or_not = self.mates.pop(0)
+            circ_intervals = []
+            support_mates = []
+            currents = [(long_interval1, [long_interval1.mate], circ_intervals, support_mates, False)]
+            circ_first = False
+            while currents:
+                current = currents.pop()
+                for extend in self.extend(*current[:-1]):
+                    if extend[0]:
+                        currents.append(extend)
                     else:
-                        current_interval.extend_depth.append(
-                            self.interval_depth(utils.Interval(intersect_interval.chrom, extend_interval.start,
-                                                               intersect_interval.end)))
-                    if self.similar_depth(current_interval, intersect_interval.raw_depth):
-                        whole_interval = self.combine(current_interval, intersect_interval)
-                        self.left_right_depth(whole_interval)
-                        add_long_interval = self.add_long_interval(current_interval, whole_interval)
-                        if add_long_interval:
-                            long_intervals.append(add_long_interval)
-                        current_support_mates.append(intersect_interval.mate)
-                        long_intervals.remove(intersect_interval)
-                        if intersect_interval == other_long_interval:
-                            extend = False
-                        else:
-                            current_interval = intersect_interval.other_long_interval
-                            if current_interval in long_intervals:
-                                long_intervals.remove(current_interval)
-                        current_result.append(whole_interval)
-                        continue
-                extend_depth, extend_or_not = self.extend_amplified(current_interval, extend_interval)
-                if extend_or_not:
-                    if current_interval.clipped == 'left':
-                        current_interval.end = extend_interval.end
-                    else:
-                        current_interval.start = extend_interval.start
-                    current_interval.extend_depth.append(extend_depth)
-                else:
-                    if current_interval.clipped == "right":
-                        whole_interval = utils.WholeInterval(chrom=current_interval.chrom, start=current_interval.start,
-                                                             end=current_interval.end, strand='-',
-                                                             depths=current_interval.extend_depth)
-                    else:
-                        whole_interval = utils.WholeInterval(chrom=current_interval.chrom, start=current_interval.start,
-                                                             end=current_interval.end, strand='+',
-                                                             depths=current_interval.extend_depth)
-                    self.left_right_depth(whole_interval)
-                    current_result.append(whole_interval)
-                    extend = False
-            results.append((current_result, current_support_mates))
-
+                        results.append((extend[2], extend[3]))
+                    if extend[-1] == 0:
+                        circ_first = True
+            if not circ_first and first_or_not:
+                # todo
+                self.mates.append((long_interval2, long_interval1, False))
+            all_support_mates = [support_mate for result in results for support_mate in result[1]]
+            self.mates = [mate for mate in self.mates if mate[0].mate not in all_support_mates]
         circ_results = []
         not_circ_results = []
-        for result, support_mate in results:
-            if len(result) == len(support_mate):
-                circ_results.append((result, support_mate))
+        for circ_intervals, support_mates in results:
+            if len(circ_intervals) == len(support_mates):
+                circ_results.append((circ_intervals, support_mates))
             else:
-                not_circ_results.append((result, support_mate))
+                not_circ_results.append((circ_intervals, support_mates))
         return circ_results, not_circ_results
 
-    def add_long_interval(self, current_interval, whole_interval):
-        if current_interval.clipped == "left" and self.similar_depth(current_interval,
-                                                                     whole_interval.right_depth):
-            long_interval = utils.LongInterval(
-                utils.Interval(whole_interval.chrom, whole_interval.start, whole_interval.end + utils.extension),
-                'left', current_interval.mate)
-            long_interval.other_long_interval = current_interval.other_long_interval
-            long_interval.extend_depth = current_interval.extend_depth
-            long_interval.extend_depth.append(whole_interval.right_depth)
-            long_interval.raw_depth = current_interval.raw_depth
-            return long_interval
-
-        elif current_interval.clipped == "right" and self.similar_depth(current_interval,
-                                                                        whole_interval.left_depth):
-            long_interval = utils.LongInterval(
-                utils.Interval(whole_interval.chrom, whole_interval.start - utils.extension, whole_interval.end),
-                'right', current_interval.mate)
-            long_interval.other_long_interval = current_interval.other_long_interval
-            long_interval.extend_depth = current_interval.extend_depth
-            long_interval.extend_depth.append(whole_interval.right_depth)
-            long_interval.raw_depth = current_interval.raw_depth
-            return long_interval
+    def extend(self, long_interval, other_long_intervals, circ_intervals, support_mates):
+        extend_interval = self.interval_extend(long_interval, self.extend_size)
+        intersect_intervals = extend_interval.intersects(self.long_intervals)
+        intersect_intervals = [i for i in intersect_intervals if i.mate != long_interval.mate]
+        extend_depth, extend_or_not = self.extend_amplified(long_interval, extend_interval, circ_intervals)
+        if intersect_intervals:
+            for intersect_interval in intersect_intervals:
+                if intersect_interval.clipped == utils.opposite[long_interval.clipped]:
+                    if self.similar_depth(long_interval, intersect_interval, circ_intervals):
+                        whole_interval = self.combine(long_interval, intersect_interval)
+                        self.left_right_depth(whole_interval)
+                        if intersect_interval.mate in other_long_intervals:
+                            intersect_id = other_long_intervals.index(intersect_interval.mate)
+                            yield (
+                                None, None, circ_intervals[intersect_id:] + [whole_interval],
+                                support_mates[intersect_id:] + [intersect_interval.mate], intersect_id)
+                        else:
+                            yield (
+                                intersect_interval.other_long_interval,
+                                other_long_intervals + [intersect_interval.mate],
+                                circ_intervals + [whole_interval],
+                                support_mates + [intersect_interval.mate], None)
+        if extend_or_not:
+            if long_interval.clipped == 'left':
+                long_interval.end = extend_interval.end
+            else:
+                long_interval.start = extend_interval.start
+            long_interval.extend_depth.append(extend_depth)
+            yield (long_interval, other_long_intervals, circ_intervals, support_mates, None)
         else:
-            return False
+            if long_interval.clipped == "right":
+                whole_interval = utils.WholeInterval(chrom=long_interval.chrom, start=long_interval.start,
+                                                     end=long_interval.end, strand='-',
+                                                     depths=long_interval.extend_depth)
+            else:
+                whole_interval = utils.WholeInterval(chrom=long_interval.chrom, start=long_interval.start,
+                                                     end=long_interval.end, strand='+',
+                                                     depths=long_interval.extend_depth)
+            # avoid influence
+            if len(long_interval.extend_depth) > 1:
+                long_interval.extend_depth = long_interval.extend_depth[:-1]
+            self.left_right_depth(whole_interval)
+            yield (None, None, circ_intervals + [whole_interval], support_mates, None)
 
-    def similar_depth(self, interval1, interval2_depth):
-        extend_depth = np.array(interval1.extend_depth)
-        average = np.average(extend_depth)
-        low = average - (average / self.depth_average) * self.depth_std
-        high = average + (average / self.depth_average) * self.depth_std
-        if np.all(low <= extend_depth) and low <= interval2_depth < high and np.all(high >= extend_depth):
+    def similar_depth(self, interval1, intersect_interval, previous_intervals):
+        extend_depth = interval1.extend_depth
+        low, high, low_value, high_value = self.limit(extend_depth, previous_intervals)
+        if low <= low_value and low <= intersect_interval.depth < high and high_value <= high and low <= intersect_interval.other_long_interval.depth < high:
             return True
         else:
             return False
 
-    def extend_amplified(self, current_interval, extend_interval):
-        extend_depth = self.interval_depth(extend_interval)
-        if extend_depth < self.upper_limit:
-            return extend_depth, False
-        average = np.average(current_interval.extend_depth)
+    def limit(self, extend_depth, previous_intervals=None):
+        sum_depth = [(np.average(extend_depth), len(extend_depth), np.min(extend_depth), np.max(extend_depth))]
+        if previous_intervals:
+            sum_depth.extend([(interval.depth, len(interval.depths), np.min(interval.depths),
+                                  np.max(interval.depths)) for interval in previous_intervals])
+        low_value = np.min([i[2] for i in sum_depth])
+        high_value = np.max([i[3] for i in sum_depth])
+        average = np.sum([i[0] * i[1] for i in sum_depth]) / np.sum([i[1] for i in sum_depth])
         low = average - (average / self.depth_average) * self.depth_std
-        if low <= extend_depth and low <= current_interval.raw_depth:
-            return extend_depth, True
+        high = average + (average / self.depth_average) * self.depth_std
+        return low, high, low_value, high_value
+
+    def extend_amplified(self, long_interval, extend_interval, previous_intervals):
+        extend_part_depth = self.interval_depth(extend_interval)
+        if extend_part_depth < self.upper_limit or long_interval.length() > 20000000:
+            return extend_part_depth, False
+        low, high, low_value, high_value = self.limit(long_interval.extend_depth, previous_intervals)
+        if low < low_value and low <= long_interval.depth and low <= extend_part_depth:
+            return extend_part_depth, True
         else:
-            return extend_depth, False
+            return extend_part_depth, False
 
     @staticmethod
     def interval_extend(long_interval, extend_size):
@@ -178,23 +170,29 @@ class ECDNA:
             return interval
 
     def interval_depth(self, interval):
-        depth = sum([sum(a) for a in self.bam.count_coverage(interval.chrom, interval.start, interval.end)]) / (
-                interval.end - interval.start)
-        return depth
+        if interval.start <= 0:
+            return 0
+        else:
+            depth = sum([sum(a) for a in self.bam.count_coverage(interval.chrom, interval.start, interval.end)]) / (
+                    interval.end - interval.start)
+            return depth
 
     def build_long_intervals(self):
         long_interval1s = [utils.LongInterval(i.interval1, i.clipped1, i) for i in self.split_read_mates]
         long_interval2s = [utils.LongInterval(i.interval2, i.clipped2, i) for i in self.split_read_mates]
-        for long_interval in long_interval1s + long_interval2s:
-            long_interval.raw_depth = self.interval_depth(long_interval)
-            long_interval.extend_depth.append(long_interval.raw_depth)
+        for long_interval in long_interval1s:
+            long_interval.depth = long_interval.mate.interval1.depth
+            long_interval.extend_depth.append(long_interval.depth)
+        for long_interval in long_interval2s:
+            long_interval.depth = long_interval.mate.interval2.depth
+            long_interval.extend_depth.append(long_interval.depth)
         for long_interval1, long_interval2 in zip(long_interval1s, long_interval2s):
-            if long_interval1.raw_depth > self.upper_limit or long_interval2.raw_depth > self.upper_limit:
-                long_interval1.other_long_interval = long_interval2
-                long_interval2.other_long_interval = long_interval1
-                self.long_intervals.append(long_interval1)
-                self.long_intervals.append(long_interval2)
-        self.long_intervals.sort(key=lambda i: i.raw_depth, reverse=False)
+            long_interval1.other_long_interval = long_interval2
+            long_interval2.other_long_interval = long_interval1
+            self.long_intervals.append(copy.copy(long_interval1))
+            self.long_intervals.append(copy.copy(long_interval2))
+            self.mates.append((long_interval1, long_interval2, True))
+        print(f"finally, {len(self.mates)} mates, {len(self.long_intervals)} intervals")
 
     def left_right_depth(self, whole_interval):
         left_interval = utils.Interval(whole_interval.chrom, whole_interval.start - utils.extension,
@@ -211,6 +209,16 @@ class ECDNA:
         print(f"before process, {len(split_read_mates)} sr mates, {len(discordant_mates)} discordant mates")
         split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
                             len(split_read_mate.support_split_reads) >= self.split_read_cutoff]
+        removes = []
+        for split_read_mate in split_read_mates:
+            depth1 = split_read_mate.interval1.depth = self.interval_depth(split_read_mate.interval1)
+            depth2 = split_read_mate.interval2.depth = self.interval_depth(split_read_mate.interval2)
+            low, high, low_value, high_value = self.limit([depth1, depth2])
+            if depth1 > self.upper_limit and depth2 > self.upper_limit and low < depth1 < high and low < depth2 < high:
+                pass
+            else:
+                removes.append(split_read_mate)
+        split_read_mates = [split_read_mate for split_read_mate in split_read_mates if split_read_mate not in removes]
         split_read_mates = utils.process_all_sr_mates(split_read_mates)
         split_read_mates, discordant_mates = utils.assign_discordant_mates(split_read_mates, discordant_mates)
         split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
