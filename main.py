@@ -20,9 +20,11 @@ import utils
 from ecdna import ECDNA
 
 parser = argparse.ArgumentParser(description="ecDNA-finder")
-parser.add_argument('-c', '--coordinate', help='bam file sorted by coordinate', required=True)
-parser.add_argument('-q', '--queryname', help='bam file sorted by queryname', required=True)
-parser.add_argument('-d', '--dirname', help='result directory', required=True)
+parser.add_argument('-coord', '--coordinate', help='bam file sorted by coordinate', required=True)
+parser.add_argument('-query', '--queryname', help='bam file sorted by queryname', required=True)
+parser.add_argument('-dir', '--dirname', help='result directory', required=True)
+parser.add_argument('-peak', '--peak', help='seed interval value cutoff', required=False, default=1, type=int)
+parser.add_argument('-mate', '--mate', help='mate support read cutoff', action='store_true')
 args = parser.parse_args()
 
 # prepare
@@ -32,6 +34,8 @@ if not os.path.exists(args.dirname):
 os.chdir(args.dirname)
 sorted_query_name_bam_file = args.queryname
 sorted_coordinate_bam_file = args.coordinate
+utils.peak_value_cutoff = args.peak
+utils.mate_cutoff = args.mate
 extracted_file = 'extracted.bam'
 utils.cores = mp.cpu_count()
 start = time.localtime()
@@ -75,7 +79,8 @@ print(f'Now use time {((time.mktime(end) - time.mktime(start)) / 3600):.2f}h')
 
 # filter and assemble
 ecdna = ECDNA(sorted_coordinate_bam_file, split_read_mates, discordant_mates, depth_average=utils.depth_average,
-              depth_std=utils.depth_std, max_insert=utils.extension, extend_size=utils.extend_size, cutoff=False)
+              depth_std=utils.depth_std, max_insert=utils.extension, extend_size=utils.extend_size,
+              cutoff=utils.mate_cutoff)
 circ_results, not_circ_results = ecdna.assemble()
 utils.circ_result_out(circ_results)
 utils.not_circ_result_out(not_circ_results)
@@ -85,7 +90,6 @@ utils.not_circ_result_out(not_circ_results)
 # write output
 with open("results.pickle", 'wb') as f:
     pickle.dump([circ_results, not_circ_results], f)
-print(f'Write success circ {len(circ_results)} ')
 end = time.localtime()
 print(time.strftime("%Y %b %d %H:%M:%S", end))
 print(f'All use time {((time.mktime(end) - time.mktime(start)) / 3600):.2f}h')

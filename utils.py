@@ -44,8 +44,7 @@ depth_average = 60
 depth_std = 20
 
 peak_value_cutoff = 1
-split_read_cutoff = 1
-discordant_read_cutoff = 0
+mate_cutoff = False
 chrom_names = []
 chrom_lengths = []
 
@@ -446,8 +445,13 @@ def circ_result_out(circ_results):
     out = pd.DataFrame(out, columns=['chrom', 'start', 'end', 'strand', 'length', 'average_depth', 'left_depth',
                                      'right_depth', 'support_split_reads', 'support_discordant_reads',
                                      'support_left_right_link', 'circ_id'])
-    out.drop_duplicates(subset=['chrom', 'start', 'end'],
-                        keep='first', inplace=True)
+    group = out.groupby('circ_id').aggregate(
+        {'circ_id': 'count', 'average_depth': 'mean', 'chrom': 'unique', 'length': 'sum'})
+    group.sort_index()
+    group.drop_duplicates(subset=['circ_id', 'length'],
+                          keep='first', inplace=True)
+    out = out[out.circ_id.isin(group.index)]
+    print(f'Write success circ {out.circ_id.nunique()}')
     out.to_csv('circ_results.tsv', sep='\t', index=False)
 
 

@@ -28,12 +28,12 @@ class ECDNA:
         self.upper_limit = round(self.depth_average + 1.5 * self.depth_std)
         self.cutoff = cutoff
         if self.cutoff:
-            self.split_read_cutoff = round(self.depth_average / 30) or 1
+            self.split_read_cutoff = round(self.depth_average / 60) or 1
             self.discordant_read_cutoff = round(self.depth_average / 60)
             print(f"split_read_cutoff {self.split_read_cutoff}, discordant_read_cutoff {self.discordant_read_cutoff}")
         self.filter()
 
-        self.long_intervals = []
+        self.long_intervals_for_index = []
         self.mates = []
         self.build_long_intervals()
 
@@ -68,10 +68,13 @@ class ECDNA:
                 not_circ_results.append((circ_intervals, support_mates))
         return circ_results, not_circ_results
 
-    def extend(self, long_interval, other_long_intervals, circ_intervals, support_mates):
+    def extend(self, long_interval, other_index_intervals, circ_intervals, support_mates):
         extend_interval = self.interval_extend(long_interval, self.extend_size)
-        intersect_intervals = extend_interval.intersects(self.long_intervals)
-        intersect_intervals = [i for i in intersect_intervals if i.other_index_interval != long_interval.other_index_interval]
+        interval_for_remove = [other_index_interval.other_index_interval for other_index_interval in
+                               other_index_intervals]
+        interval_for_indexs = [interval_for_index for interval_for_index in self.long_intervals_for_index if
+                               interval_for_index not in interval_for_remove]
+        intersect_intervals = extend_interval.intersects(interval_for_indexs)
         extend_depth, extend_or_not = self.extend_amplified(long_interval, extend_interval, circ_intervals)
         if intersect_intervals:
             for intersect_interval in intersect_intervals:
@@ -79,15 +82,15 @@ class ECDNA:
                     if self.similar_depth(long_interval, intersect_interval, circ_intervals):
                         whole_interval = self.combine(long_interval, intersect_interval)
                         self.left_right_depth(whole_interval)
-                        if intersect_interval.other_index_interval in other_long_intervals:
-                            intersect_id = other_long_intervals.index(intersect_interval.other_index_interval)
+                        if intersect_interval in other_index_intervals:
+                            intersect_id = other_index_intervals.index(intersect_interval)
                             yield (
                                 None, None, circ_intervals[intersect_id:] + [whole_interval],
                                 support_mates[intersect_id:] + [intersect_interval.mate], intersect_id)
                         else:
                             yield (
-                                intersect_interval.other_long_interval,
-                                other_long_intervals + [intersect_interval.other_index_interval],
+                                self.shorten(intersect_interval.other_long_interval),
+                                other_index_intervals + [intersect_interval],
                                 circ_intervals + [whole_interval],
                                 support_mates + [intersect_interval.mate], None)
         if extend_or_not:
@@ -96,7 +99,7 @@ class ECDNA:
             else:
                 long_interval.start = extend_interval.start
             long_interval.extend_depth.append(extend_depth)
-            yield (long_interval, other_long_intervals, circ_intervals, support_mates, None)
+            yield (long_interval, other_index_intervals, circ_intervals, support_mates, None)
         else:
             if long_interval.clipped == "right":
                 whole_interval = utils.WholeInterval(chrom=long_interval.chrom, start=long_interval.start,
@@ -112,10 +115,17 @@ class ECDNA:
             self.left_right_depth(whole_interval)
             yield (None, None, circ_intervals + [whole_interval], support_mates, None)
 
+    def shorten(self, long_interval):
+        if long_interval.clipped == 'left':
+            long_interval.end = long_interval.start + self.max_insert
+        if long_interval.clipped == 'right':
+            long_interval.start = long_interval.end - self.max_insert
+        return long_interval
+
     def similar_depth(self, interval1, intersect_interval, previous_intervals):
         extend_depth = interval1.extend_depth
         low, high, low_value, high_value = self.limit(extend_depth, previous_intervals)
-        if low <= low_value and low <= intersect_interval.depth < high and high_value <= high and low <= intersect_interval.other_long_interval.depth < high:
+        if low <= low_value and low <= intersect_interval.depth < high and high_value <= high and low <= intersect_interval.other_index_interval.depth < high:
             return True
         else:
             return False
@@ -188,14 +198,22 @@ class ECDNA:
             long_interval.depth = long_interval.mate.interval2.depth
             long_interval.extend_depth.append(long_interval.depth)
         for long_interval1, long_interval2 in zip(long_interval1s, long_interval2s):
+            long_interval1_for_index = copy.copy(long_interval1)
+            long_interval2_for_index = copy.copy(long_interval2)
+
             long_interval1.other_long_interval = long_interval2
-            long_interval1.other_index_interval = copy.copy(long_interval2)
+            long_interval1.other_index_interval = long_interval2_for_index
+            long_interval2_for_index.other_long_interval = long_interval1
+            long_interval2_for_index.other_index_interval = long_interval1_for_index
+
             long_interval2.other_long_interval = long_interval1
-            long_interval2.other_index_interval = copy.copy(long_interval1)
-            self.long_intervals.append(long_interval1.other_index_interval)
-            self.long_intervals.append(long_interval2.other_index_interval)
+            long_interval2.other_index_interval = long_interval1_for_index
+            long_interval1_for_index.other_long_interval = long_interval2
+            long_interval1_for_index.other_index_interval = long_interval2_for_index
+            self.long_intervals_for_index.append(long_interval1_for_index)
+            self.long_intervals_for_index.append(long_interval2_for_index)
             self.mates.append((long_interval1, long_interval2, True))
-        print(f"finally, {len(self.mates)} mates, {len(self.long_intervals)} intervals")
+        print(f"finally, {len(self.mates)} mates, {len(self.long_intervals_for_index)} intervals")
 
     def left_right_depth(self, whole_interval):
         left_interval = utils.Interval(whole_interval.chrom, whole_interval.start - utils.extension,

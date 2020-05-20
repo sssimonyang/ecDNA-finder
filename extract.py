@@ -86,8 +86,8 @@ def extract(in_bam_file, out_bam_file, sample_size, bed_size, tlen_min, mapq_cut
     process_same_qname_reads(same_qname_reads)
     in_bam.close()
     out_bam.close()
-    mean = np.round(np.mean(insert_length))
-    std = np.round(np.std(insert_length))
+    mean = int(np.round(np.mean(insert_length)))
+    std = int(np.round(np.std(insert_length)))
 
     print(f"all {all_num}\nextract {write_num}\n"
           f"discordant_reads {discordant_reads_num}\nsplit_reads {split_reads_num}\n"
@@ -153,7 +153,7 @@ def compute_depth(bam_file, beds):
         depths.append(interval_depth(i))
     median_depth = np.median(depths)
     filter_depth = [c for c in depths if c < 2 * median_depth]
-    depth_average = np.round(np.average(filter_depth))
-    depth_std = np.round(np.std(filter_depth))
+    depth_average = int(np.round(np.average(filter_depth)))
+    depth_std = int(np.round(np.std(filter_depth)))
     print(f"depth average {depth_average}, std {depth_std}")
     return depth_average, depth_std
