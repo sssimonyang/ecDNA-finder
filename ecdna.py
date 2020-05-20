@@ -17,7 +17,7 @@ import utils
 
 class ECDNA:
     def __init__(self, bam_file, split_read_mates, discordant_mates, depth_average=utils.depth_average,
-                 depth_std=utils.depth_std, max_insert=utils.extension, extend_size=utils.extend_size):
+                 depth_std=utils.depth_std, max_insert=utils.extension, extend_size=utils.extend_size, cutoff=False):
         self.bam = ps.AlignmentFile(bam_file, 'rb')
         self.split_read_mates = split_read_mates
         self.discordant_mates = discordant_mates
@@ -26,10 +26,11 @@ class ECDNA:
         self.max_insert = max_insert
         self.extend_size = extend_size
         self.upper_limit = round(self.depth_average + 1.5 * self.depth_std)
-
-        self.split_read_cutoff = round(self.depth_average / 30) or 1
-        self.discordant_read_cutoff = self.split_read_cutoff * 2
-        print(f"split_read_cutoff {self.split_read_cutoff}, discordant_read_cutoff {self.discordant_read_cutoff}")
+        self.cutoff = cutoff
+        if self.cutoff:
+            self.split_read_cutoff = round(self.depth_average / 30) or 1
+            self.discordant_read_cutoff = round(self.depth_average / 60)
+            print(f"split_read_cutoff {self.split_read_cutoff}, discordant_read_cutoff {self.discordant_read_cutoff}")
         self.filter()
 
         self.long_intervals = []
@@ -42,7 +43,7 @@ class ECDNA:
             long_interval1, long_interval2, first_or_not = self.mates.pop(0)
             circ_intervals = []
             support_mates = []
-            currents = [(long_interval1, [long_interval1.mate], circ_intervals, support_mates, False)]
+            currents = [(long_interval1, [long_interval1.other_index_interval], circ_intervals, support_mates, False)]
             circ_first = False
             while currents:
                 current = currents.pop()
@@ -70,7 +71,7 @@ class ECDNA:
     def extend(self, long_interval, other_long_intervals, circ_intervals, support_mates):
         extend_interval = self.interval_extend(long_interval, self.extend_size)
         intersect_intervals = extend_interval.intersects(self.long_intervals)
-        intersect_intervals = [i for i in intersect_intervals if i.mate != long_interval.mate]
+        intersect_intervals = [i for i in intersect_intervals if i.other_index_interval != long_interval.other_index_interval]
         extend_depth, extend_or_not = self.extend_amplified(long_interval, extend_interval, circ_intervals)
         if intersect_intervals:
             for intersect_interval in intersect_intervals:
@@ -78,15 +79,15 @@ class ECDNA:
                     if self.similar_depth(long_interval, intersect_interval, circ_intervals):
                         whole_interval = self.combine(long_interval, intersect_interval)
                         self.left_right_depth(whole_interval)
-                        if intersect_interval.mate in other_long_intervals:
-                            intersect_id = other_long_intervals.index(intersect_interval.mate)
+                        if intersect_interval.other_index_interval in other_long_intervals:
+                            intersect_id = other_long_intervals.index(intersect_interval.other_index_interval)
                             yield (
                                 None, None, circ_intervals[intersect_id:] + [whole_interval],
                                 support_mates[intersect_id:] + [intersect_interval.mate], intersect_id)
                         else:
                             yield (
                                 intersect_interval.other_long_interval,
-                                other_long_intervals + [intersect_interval.mate],
+                                other_long_intervals + [intersect_interval.other_index_interval],
                                 circ_intervals + [whole_interval],
                                 support_mates + [intersect_interval.mate], None)
         if extend_or_not:
@@ -123,7 +124,7 @@ class ECDNA:
         sum_depth = [(np.average(extend_depth), len(extend_depth), np.min(extend_depth), np.max(extend_depth))]
         if previous_intervals:
             sum_depth.extend([(interval.depth, len(interval.depths), np.min(interval.depths),
-                                  np.max(interval.depths)) for interval in previous_intervals])
+                               np.max(interval.depths)) for interval in previous_intervals])
         low_value = np.min([i[2] for i in sum_depth])
         high_value = np.max([i[3] for i in sum_depth])
         average = np.sum([i[0] * i[1] for i in sum_depth]) / np.sum([i[1] for i in sum_depth])
@@ -188,9 +189,11 @@ class ECDNA:
             long_interval.extend_depth.append(long_interval.depth)
         for long_interval1, long_interval2 in zip(long_interval1s, long_interval2s):
             long_interval1.other_long_interval = long_interval2
+            long_interval1.other_index_interval = copy.copy(long_interval2)
             long_interval2.other_long_interval = long_interval1
-            self.long_intervals.append(copy.copy(long_interval1))
-            self.long_intervals.append(copy.copy(long_interval2))
+            long_interval2.other_index_interval = copy.copy(long_interval1)
+            self.long_intervals.append(long_interval1.other_index_interval)
+            self.long_intervals.append(long_interval2.other_index_interval)
             self.mates.append((long_interval1, long_interval2, True))
         print(f"finally, {len(self.mates)} mates, {len(self.long_intervals)} intervals")
 
@@ -207,8 +210,9 @@ class ECDNA:
         split_read_mates = self.split_read_mates
         discordant_mates = self.discordant_mates
         print(f"before process, {len(split_read_mates)} sr mates, {len(discordant_mates)} discordant mates")
-        split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
-                            len(split_read_mate.support_split_reads) >= self.split_read_cutoff]
+        if self.cutoff:
+            split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
+                                len(split_read_mate.support_split_reads) >= self.split_read_cutoff]
         removes = []
         for split_read_mate in split_read_mates:
             depth1 = split_read_mate.interval1.depth = self.interval_depth(split_read_mate.interval1)
@@ -221,10 +225,11 @@ class ECDNA:
         split_read_mates = [split_read_mate for split_read_mate in split_read_mates if split_read_mate not in removes]
         split_read_mates = utils.process_all_sr_mates(split_read_mates)
         split_read_mates, discordant_mates = utils.assign_discordant_mates(split_read_mates, discordant_mates)
-        split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
-                            len(split_read_mate.support_discordant_reads) >= self.discordant_read_cutoff]
-        discordant_mates = [discordant_mate for discordant_mate in discordant_mates if
-                            len(discordant_mate.support_discordant_reads) >= self.discordant_read_cutoff]
+        if self.cutoff:
+            split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
+                                len(split_read_mate.support_discordant_reads) >= self.discordant_read_cutoff]
+            discordant_mates = [discordant_mate for discordant_mate in discordant_mates if
+                                len(discordant_mate.support_discordant_reads) >= self.discordant_read_cutoff]
         print(f"after process, {len(split_read_mates)} sr mates, {len(discordant_mates)} discordant mates")
         self.split_read_mates = split_read_mates
         self.discordant_mates = discordant_mates

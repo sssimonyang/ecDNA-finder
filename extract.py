@@ -109,9 +109,9 @@ def cluster(extracted_file, cluster_distance):
 def split_interval(peaks_file, cutoff, cores):
     peaks = pd.read_csv(peaks_file, sep='\t', names=['chrom', 'start', 'end', 'value'],
                         dtype={'chrom': 'str', 'start': 'int', 'end': 'int', 'value': 'float'})
-    peaks = peaks[peaks.value >= cutoff]
+    peaks = peaks[peaks.value > cutoff]
     print(f"all interval {peaks.shape[0]}, cutoff {cutoff}")
-    chunks = cores * 10
+    chunks = cores * 100
     counter = 0
     split_peaks = []
     for i in range(0, chunks):

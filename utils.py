@@ -26,7 +26,7 @@ mapq_cutoff = 40
 interval_p_cutoff = 0.5
 
 # number
-sample_size = 1000000
+sample_size = 10000
 bed_size = 10000
 std = 4
 
@@ -43,9 +43,9 @@ insert_std = 100
 depth_average = 60
 depth_std = 20
 
-peak_value_cutoff = 6
-split_read_cutoff = 3
-discordant_read_cutoff = 3
+peak_value_cutoff = 1
+split_read_cutoff = 1
+discordant_read_cutoff = 0
 chrom_names = []
 chrom_lengths = []
 
@@ -419,6 +419,7 @@ class LongInterval(Interval):
         self.mate = mate
         self.raw_depth = 0.0
         self.other_long_interval = None
+        self.other_index_interval = None
         self.extend_depth = []
 
 
