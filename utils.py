@@ -429,22 +429,22 @@ class WholeInterval(Interval):
         self.left_depth = None
         self.right_depth = None
         self.depth = np.average(self.depths)
-        self.supports = []
 
 
 def circ_result_out(circ_results):
     out = []
+    if not len(circ_results):
+        return
     for i, circ in enumerate(circ_results):
         for interval, mate in zip(circ[0], circ[1]):
             out.append(
                 [interval.chrom, interval.start, interval.end, interval.strand, interval.length(),
                  interval.depth, interval.left_depth, interval.right_depth,
                  len(mate.support_split_reads),
-                 len(mate.support_discordant_reads), len(interval.supports), i + 1])
+                 len(mate.support_discordant_reads), i + 1])
 
     out = pd.DataFrame(out, columns=['chrom', 'start', 'end', 'strand', 'length', 'average_depth', 'left_depth',
-                                     'right_depth', 'support_split_reads', 'support_discordant_reads',
-                                     'support_left_right_link', 'circ_id'])
+                                     'right_depth', 'support_split_reads', 'support_discordant_reads', 'circ_id'])
     group = out.groupby('circ_id').aggregate(
         {'circ_id': 'count', 'average_depth': 'mean', 'chrom': 'unique', 'length': 'sum'})
     group.sort_index()
@@ -457,6 +457,8 @@ def circ_result_out(circ_results):
 
 def not_circ_result_out(not_circ_results):
     out = []
+    if not len(not_circ_results):
+        return
     for i, not_circ in enumerate(not_circ_results):
         not_circ_interval = not_circ[0][-1]
         circ_interval = not_circ[0][:-1]
@@ -467,29 +469,15 @@ def not_circ_result_out(not_circ_results):
                 [interval.chrom, interval.start, interval.end, interval.strand, interval.length(),
                  interval.depth, interval.left_depth, interval.right_depth,
                  len(mate.support_split_reads),
-                 len(mate.support_discordant_reads), len(interval.supports), i + 1])
+                 len(mate.support_discordant_reads), i + 1])
         interval = not_circ_interval
         out.append([interval.chrom, interval.start, interval.end, interval.strand, interval.length(),
                     interval.depth, interval.left_depth, interval.right_depth,
-                    0, 0, len(interval.supports), i + 1])
+                    0, 0, i + 1])
 
     out = pd.DataFrame(out, columns=['chrom', 'start', 'end', 'strand', 'length', 'average_depth', 'left_depth',
-                                     'right_depth', 'support_split_reads', 'support_discordant_reads',
-                                     'support_left_right_link', 'circ_id'])
+                                     'right_depth', 'support_split_reads', 'support_discordant_reads', 'circ_id'])
     out.to_csv('not_circ_results.tsv', sep='\t', index=False)
-
-
-def find_support_discordant_mates(two_side_intervals, discordant_mates):
-    interval1 = two_side_intervals[0]
-    interval2 = two_side_intervals[1]
-    supports = []
-    for discordant_mate in discordant_mates:
-        read1 = discordant_mate.interval1
-        read2 = discordant_mate.interval2
-        if (interval1.contain(read1) and interval2.contain(read2)) or \
-                (interval2.contain(read1) and interval1.contain(read2)):
-            supports.append(discordant_mate)
-    return supports
 
 
 class Point:
@@ -513,11 +501,17 @@ class Point:
 def process_all_sr_mates(split_read_mates):
     removes = []
     for sr_mate1, sr_mate2 in itertools.combinations(split_read_mates, 2):
-        points1 = sr_mate1.get_points()
-        points2 = sr_mate2.get_points()
-        if (points1[0].similar(points2[1]) and points1[1].similar(points2[0])) or (
-                points1[0].similar(points2[0]) and points1[1].similar(points2[1])):
-            removes.append(sr_mate2)
+        if (
+                sr_mate1.interval1.chrom == sr_mate2.interval1.chrom and sr_mate1.interval2.chrom == sr_mate2.interval2.chrom) or (
+                sr_mate1.interval2.chrom == sr_mate2.interval1.chrom and sr_mate1.interval1.chrom == sr_mate2.interval2.chrom):
+            if (
+                    sr_mate1.clipped1 == sr_mate2.clipped1 and sr_mate1.clipped2 == sr_mate2.clipped2) or (
+                    sr_mate1.clipped2 == sr_mate2.clipped1 and sr_mate1.clipped1 == sr_mate2.clipped2):
+                points1 = sr_mate1.get_points()
+                points2 = sr_mate2.get_points()
+                if (points1[0].similar(points2[1]) and points1[1].similar(points2[0])) or (
+                        points1[0].similar(points2[0]) and points1[1].similar(points2[1])):
+                    removes.append(sr_mate2)
     split_read_mates = [split_read_mate for split_read_mate in split_read_mates
                         if split_read_mate not in removes]
     return split_read_mates

@@ -62,7 +62,8 @@ manager = mp.Manager()
 pool = mp.Pool(processes=utils.cores)
 split_read_mates = manager.list()
 discordant_mates = manager.list()
-mate = mates.Mates(extracted_coordinate_file, extension=utils.extension, mapq_cutoff=utils.mapq_cutoff,
+mate = mates.Mates(extracted_coordinate_file, bam_file=sorted_coordinate_bam_file, extension=utils.extension,
+                   mapq_cutoff=utils.mapq_cutoff,
                    interval_p_cutoff=utils.interval_p_cutoff)
 for peaks in split_peaks:
     pool.apply_async(mate.find_mates, args=(peaks, split_read_mates, discordant_mates))
@@ -78,7 +79,7 @@ end = time.localtime()
 print(f'Now use time {((time.mktime(end) - time.mktime(start)) / 3600):.2f}h')
 
 # filter and assemble
-ecdna = ECDNA(sorted_coordinate_bam_file, split_read_mates, discordant_mates, depth_average=utils.depth_average,
+ecdna = ECDNA(sorted_coordinate_bam_file, split_read_mates, depth_average=utils.depth_average,
               depth_std=utils.depth_std, max_insert=utils.extension, extend_size=utils.extend_size,
               cutoff=utils.mate_cutoff)
 circ_results, not_circ_results = ecdna.assemble()

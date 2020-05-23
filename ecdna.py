@@ -16,11 +16,10 @@ import utils
 
 
 class ECDNA:
-    def __init__(self, bam_file, split_read_mates, discordant_mates, depth_average=utils.depth_average,
+    def __init__(self, bam_file, split_read_mates, depth_average=utils.depth_average,
                  depth_std=utils.depth_std, max_insert=utils.extension, extend_size=utils.extend_size, cutoff=False):
         self.bam = ps.AlignmentFile(bam_file, 'rb')
         self.split_read_mates = split_read_mates
-        self.discordant_mates = discordant_mates
         self.depth_average = depth_average
         self.depth_std = depth_std
         self.max_insert = max_insert
@@ -28,8 +27,8 @@ class ECDNA:
         self.upper_limit = round(self.depth_average + 1.5 * self.depth_std)
         self.cutoff = cutoff
         if self.cutoff:
-            self.split_read_cutoff = round(self.depth_average / 60) or 1
-            self.discordant_read_cutoff = round(self.depth_average / 60)
+            self.split_read_cutoff = round(self.depth_average / 20) or 1
+            self.discordant_read_cutoff = round(self.depth_average / 20)
             print(f"split_read_cutoff {self.split_read_cutoff}, discordant_read_cutoff {self.discordant_read_cutoff}")
         self.filter()
 
@@ -54,11 +53,16 @@ class ECDNA:
                         results.append((extend[2], extend[3]))
                     if extend[-1] == 0:
                         circ_first = True
+                # if currents:
+                #     print(current[-1])
+                # else:
+                #     print([])
             if not circ_first and first_or_not:
                 # todo
                 self.mates.append((long_interval2, long_interval1, False))
             all_support_mates = [support_mate for result in results for support_mate in result[1]]
             self.mates = [mate for mate in self.mates if mate[0].mate not in all_support_mates]
+            # print(f'left {len(self.mates)} sr mates')
         circ_results = []
         not_circ_results = []
         for circ_intervals, support_mates in results:
@@ -221,33 +225,28 @@ class ECDNA:
         right_interval = utils.Interval(whole_interval.chrom, whole_interval.end, whole_interval.end + utils.extension)
         whole_interval.left_depth = self.interval_depth(left_interval)
         whole_interval.right_depth = self.interval_depth(right_interval)
-        whole_interval.supports.extend(utils.find_support_discordant_mates([left_interval, right_interval],
-                                                                           self.discordant_mates + self.split_read_mates))
 
     def filter(self):
         split_read_mates = self.split_read_mates
-        discordant_mates = self.discordant_mates
-        print(f"before process, {len(split_read_mates)} sr mates, {len(discordant_mates)} discordant mates")
+        print(f"before process, {len(split_read_mates)} sr mates")
         if self.cutoff:
             split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
                                 len(split_read_mate.support_split_reads) >= self.split_read_cutoff]
+            split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
+                                len(split_read_mate.support_discordant_reads) >= self.discordant_read_cutoff]
+        print(f"filter, {len(split_read_mates)} sr mates")
         removes = []
         for split_read_mate in split_read_mates:
-            depth1 = split_read_mate.interval1.depth = self.interval_depth(split_read_mate.interval1)
-            depth2 = split_read_mate.interval2.depth = self.interval_depth(split_read_mate.interval2)
+            depth1 = split_read_mate.interval1.depth
+            depth2 = split_read_mate.interval2.depth
             low, high, low_value, high_value = self.limit([depth1, depth2])
             if depth1 > self.upper_limit and depth2 > self.upper_limit and low < depth1 < high and low < depth2 < high:
                 pass
             else:
                 removes.append(split_read_mate)
-        split_read_mates = [split_read_mate for split_read_mate in split_read_mates if split_read_mate not in removes]
+        split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
+                            split_read_mate not in removes]
+        print(f"filter, {len(split_read_mates)} sr mates")
         split_read_mates = utils.process_all_sr_mates(split_read_mates)
-        split_read_mates, discordant_mates = utils.assign_discordant_mates(split_read_mates, discordant_mates)
-        if self.cutoff:
-            split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
-                                len(split_read_mate.support_discordant_reads) >= self.discordant_read_cutoff]
-            discordant_mates = [discordant_mate for discordant_mate in discordant_mates if
-                                len(discordant_mate.support_discordant_reads) >= self.discordant_read_cutoff]
-        print(f"after process, {len(split_read_mates)} sr mates, {len(discordant_mates)} discordant mates")
+        print(f"after process, {len(split_read_mates)} sr mates")
         self.split_read_mates = split_read_mates
-        self.discordant_mates = discordant_mates

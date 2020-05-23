@@ -16,11 +16,17 @@ import utils
 
 class Mates:
 
-    def __init__(self, extracted_bam_file, extension, mapq_cutoff=40, interval_p_cutoff=0.5):
+    def __init__(self, extracted_bam_file, bam_file, extension, mapq_cutoff=40, interval_p_cutoff=0.5):
         self.extracted_bam_file = extracted_bam_file
+        self.bam_file = bam_file
         self.extension = extension
         self.mapq_cutoff = mapq_cutoff
         self.interval_p_cutoff = interval_p_cutoff
+
+    def interval_depth(self, bam, interval):
+        depth = sum([sum(a) for a in bam.count_coverage(interval.chrom, interval.start, interval.end)]) / (
+                interval.end - interval.start)
+        return depth
 
     def find_mates(self, peaks, split_read_mates, discordant_mates):
         peaks = pd.DataFrame.from_records(peaks, columns=['chrom', 'start', 'end'])
@@ -113,8 +119,13 @@ class Mates:
 
                 # second pass to add discordant read info
                 if iteration_split_read_mates:
-                    split_read_mates.extend(
-                        utils.assign_discordant_reads(iteration_split_read_mates, support_discordant_reads))
+                    iteration_split_read_mates = utils.assign_discordant_reads(iteration_split_read_mates,
+                                                                               support_discordant_reads)
+                    bam = ps.AlignmentFile(self.bam_file, 'rb')
+                    for split_read_mate in iteration_split_read_mates:
+                        split_read_mate.interval1.depth = self.interval_depth(bam, split_read_mate.interval1)
+                        split_read_mate.interval2.depth = self.interval_depth(bam, split_read_mate.interval2)
+                    split_read_mates.extend(iteration_split_read_mates)
 
         extracted_bam.close()
         return
