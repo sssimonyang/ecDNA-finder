@@ -451,6 +451,9 @@ def circ_result_out(circ_results):
     group.drop_duplicates(subset=['circ_id', 'length'],
                           keep='first', inplace=True)
     out = out[out.circ_id.isin(group.index)]
+    replace = group.reset_index(drop=True).index
+    to_replace = group.index
+    out['circ_id'] = out['circ_id'].replace(to_replace, replace + 1)
     print(f'Write success circ {out.circ_id.nunique()}')
     out.to_csv('circ_results.tsv', sep='\t', index=False)
 
