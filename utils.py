@@ -43,8 +43,7 @@ insert_std = 100
 depth_average = 60
 depth_std = 20
 
-peak_value_cutoff = 1
-mate_cutoff = False
+cutoff = 0
 chrom_names = []
 chrom_lengths = []
 
@@ -518,3 +517,36 @@ def process_all_sr_mates(split_read_mates):
     split_read_mates = [split_read_mate for split_read_mate in split_read_mates
                         if split_read_mate not in removes]
     return split_read_mates
+
+
+# on 7125 split_read_mates, cost time decrease from 81s to 2s
+def process_all_sr_mates(split_read_mates):
+    intervals = [
+        [[i, split_read_mate.interval1.chrom, split_read_mate.interval1.start, split_read_mate.interval1.end],
+         [i, split_read_mate.interval2.chrom, split_read_mate.interval2.start, split_read_mate.interval2.end]]
+        for i, split_read_mate in enumerate(split_read_mates)]
+    intervals = [j for i in intervals for j in i]
+    intervals = pd.DataFrame.from_records(intervals, columns=['sr_id', 'chrom', 'start', 'end'])
+    intervals = intervals.sort_values(by=['chrom', 'start', 'end'],
+                                      ascending=[True, True, True])
+    intervals = intervals.reset_index(drop=True)
+    indexs = intervals[(intervals.end.shift() - intervals.start).ge(0) & (
+            intervals.chrom.shift() == intervals.chrom)].index
+    pairs = [(intervals.loc[index].sr_id, intervals.loc[index - 1].sr_id) for index in indexs]
+    pairs = [(sr_id1, sr_id2) if sr_id1 < sr_id2 else (sr_id2, sr_id1) for sr_id1, sr_id2 in pairs]
+    pairs = list(set(pairs))
+    removes = [split_read_mates[sr_id2] for sr_id1, sr_id2 in pairs if
+               similar_check(split_read_mates[sr_id1], split_read_mates[sr_id2])]
+    split_read_mates = [split_read_mate for split_read_mate in split_read_mates
+                        if split_read_mate not in removes]
+    return split_read_mates
+
+
+def similar_check(split_read_mate1, split_read_mate2):
+    points1 = split_read_mate1.get_points()
+    points2 = split_read_mate2.get_points()
+    if (points1[0].similar(points2[1]) and points1[1].similar(points2[0])) or (
+            points1[0].similar(points2[0]) and points1[1].similar(points2[1])):
+        return True
+    else:
+        return False

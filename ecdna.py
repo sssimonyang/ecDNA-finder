@@ -17,7 +17,7 @@ import utils
 
 class ECDNA:
     def __init__(self, bam_file, split_read_mates, depth_average=utils.depth_average,
-                 depth_std=utils.depth_std, max_insert=utils.extension, extend_size=utils.extend_size, cutoff=False):
+                 depth_std=utils.depth_std, max_insert=utils.extension, extend_size=utils.extend_size, cutoff=1):
         self.bam = ps.AlignmentFile(bam_file, 'rb')
         self.split_read_mates = split_read_mates
         self.depth_average = depth_average
@@ -26,10 +26,6 @@ class ECDNA:
         self.extend_size = extend_size
         self.upper_limit = round(self.depth_average + 1.5 * self.depth_std)
         self.cutoff = cutoff
-        if self.cutoff:
-            self.split_read_cutoff = round(self.depth_average / 20) or 1
-            self.discordant_read_cutoff = round(self.depth_average / 20)
-            print(f"split_read_cutoff {self.split_read_cutoff}, discordant_read_cutoff {self.discordant_read_cutoff}")
         self.filter()
 
         self.long_intervals_for_index = []
@@ -229,24 +225,22 @@ class ECDNA:
     def filter(self):
         split_read_mates = self.split_read_mates
         print(f"before process, {len(split_read_mates)} sr mates")
-        if self.cutoff:
-            split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
-                                len(split_read_mate.support_split_reads) >= self.split_read_cutoff]
-            split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
-                                len(split_read_mate.support_discordant_reads) >= self.discordant_read_cutoff]
-        print(f"filter, {len(split_read_mates)} sr mates")
-        removes = []
-        for split_read_mate in split_read_mates:
-            depth1 = split_read_mate.interval1.depth
-            depth2 = split_read_mate.interval2.depth
-            low, high, low_value, high_value = self.limit([depth1, depth2])
-            if depth1 > self.upper_limit and depth2 > self.upper_limit and low < depth1 < high and low < depth2 < high:
-                pass
-            else:
-                removes.append(split_read_mate)
         split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
-                            split_read_mate not in removes]
+                            len(split_read_mate.support_split_reads) + len(
+                                split_read_mate.support_discordant_reads) >= self.cutoff]
+        print(f"filter, {len(split_read_mates)} sr mates")
+        split_read_mates = [split_read_mate for split_read_mate in split_read_mates if
+                            self.depth_check(split_read_mate)]
         print(f"filter, {len(split_read_mates)} sr mates")
         split_read_mates = utils.process_all_sr_mates(split_read_mates)
         print(f"after process, {len(split_read_mates)} sr mates")
         self.split_read_mates = split_read_mates
+
+    def depth_check(self, split_read_mate):
+        depth1 = split_read_mate.interval1.depth
+        depth2 = split_read_mate.interval2.depth
+        low, high, low_value, high_value = self.limit([depth1, depth2])
+        if depth1 > self.upper_limit and depth2 > self.upper_limit and low < depth1 < high and low < depth2 < high:
+            return True
+        else:
+            return False

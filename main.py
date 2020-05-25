@@ -23,8 +23,7 @@ parser = argparse.ArgumentParser(description="ecDNA-finder")
 parser.add_argument('-coord', '--coordinate', help='bam file sorted by coordinate', required=True)
 parser.add_argument('-query', '--queryname', help='bam file sorted by queryname', required=True)
 parser.add_argument('-dir', '--dirname', help='result directory', required=True)
-parser.add_argument('-peak', '--peak', help='seed interval value cutoff', required=False, default=1, type=int)
-parser.add_argument('-mate', '--mate', help='mate support read cutoff', action='store_true')
+parser.add_argument('-cutoff', '--cutoff', help='seed interval cutoff and support read cutoff', required=False, default=0, type=int)
 args = parser.parse_args()
 
 # prepare
@@ -34,8 +33,7 @@ if not os.path.exists(args.dirname):
 os.chdir(args.dirname)
 sorted_query_name_bam_file = args.queryname
 sorted_coordinate_bam_file = args.coordinate
-utils.peak_value_cutoff = args.peak
-utils.mate_cutoff = args.mate
+utils.cutoff = args.cutoff
 extracted_file = 'extracted.bam'
 utils.cores = mp.cpu_count()
 start = time.localtime()
@@ -48,9 +46,12 @@ utils.insert_mean, utils.insert_std, beds = extract.extract(sorted_query_name_ba
                                                             bed_size=utils.bed_size, tlen_min=utils.tlen_min,
                                                             mapq_cutoff=utils.mapq_cutoff)
 utils.depth_average, utils.depth_std = extract.compute_depth(sorted_coordinate_bam_file, beds)
+if utils.cutoff == 0:
+    utils.cutoff = round(utils.depth_average / 20) or 1
+print(f"cutoff {utils.cutoff}")
 utils.extension = utils.insert_mean + utils.std * utils.insert_std
 extracted_coordinate_file, peaks_file = extract.cluster(extracted_file, cluster_distance=utils.cluster_distance)
-split_peaks = extract.split_interval(peaks_file, cutoff=utils.peak_value_cutoff, cores=utils.cores)
+split_peaks = extract.split_interval(peaks_file, cutoff=utils.cutoff, cores=utils.cores)
 
 with open("First.pickle", 'wb') as f:
     pickle.dump([extracted_coordinate_file, utils.extension, utils.depth_average, utils.depth_std, split_peaks], f)
@@ -81,7 +82,7 @@ print(f'Now use time {((time.mktime(end) - time.mktime(start)) / 3600):.2f}h')
 # filter and assemble
 ecdna = ECDNA(sorted_coordinate_bam_file, split_read_mates, depth_average=utils.depth_average,
               depth_std=utils.depth_std, max_insert=utils.extension, extend_size=utils.extend_size,
-              cutoff=utils.mate_cutoff)
+              cutoff=utils.cutoff)
 circ_results, not_circ_results = ecdna.assemble()
 utils.circ_result_out(circ_results)
 utils.not_circ_result_out(not_circ_results)
