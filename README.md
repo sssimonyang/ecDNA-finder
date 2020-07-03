@@ -22,7 +22,7 @@ python main.py -coord {coordinate-sorted} -query {queryname-sorted} -dir {dirnam
 ### Other important params you may need
 -cutoff : the default value of cutoff is 0, which means use the round(depth_average / 20) to cutoff peak and split read mate.
 The depth_average is calculated automatically. Certainly, the mininum allowable value is 1. YOU can provide this value to change the result.
-BUT the amount oHf time spent varies accordingly.
+BUT the amount of time used varies accordingly.
 
 ### Results
 Results is placed in a new directory named {dirname} in the current directory.
