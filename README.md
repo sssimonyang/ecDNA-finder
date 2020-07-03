@@ -28,7 +28,7 @@ BUT the amount oHf time spent varies accordingly.
 Results is placed in a new directory named {dirname} in the current directory.
 The circ_results.tsv is a tab-delimiter file.
 
-### elp guide
+### Help guide
 ```
 usage: main.py [-h] -coord COORDINATE -query QUERYNAME -dir DIRNAME
                    [-cutoff CUTOFF]
