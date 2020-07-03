@@ -500,23 +500,23 @@ class Point:
     __str__ = __repr__
 
 
-def process_all_sr_mates(split_read_mates):
-    removes = []
-    for sr_mate1, sr_mate2 in itertools.combinations(split_read_mates, 2):
-        if (
-                sr_mate1.interval1.chrom == sr_mate2.interval1.chrom and sr_mate1.interval2.chrom == sr_mate2.interval2.chrom) or (
-                sr_mate1.interval2.chrom == sr_mate2.interval1.chrom and sr_mate1.interval1.chrom == sr_mate2.interval2.chrom):
-            if (
-                    sr_mate1.clipped1 == sr_mate2.clipped1 and sr_mate1.clipped2 == sr_mate2.clipped2) or (
-                    sr_mate1.clipped2 == sr_mate2.clipped1 and sr_mate1.clipped1 == sr_mate2.clipped2):
-                points1 = sr_mate1.get_points()
-                points2 = sr_mate2.get_points()
-                if (points1[0].similar(points2[1]) and points1[1].similar(points2[0])) or (
-                        points1[0].similar(points2[0]) and points1[1].similar(points2[1])):
-                    removes.append(sr_mate2)
-    split_read_mates = [split_read_mate for split_read_mate in split_read_mates
-                        if split_read_mate not in removes]
-    return split_read_mates
+# def process_all_sr_mates(split_read_mates):
+#     removes = []
+#     for sr_mate1, sr_mate2 in itertools.combinations(split_read_mates, 2):
+#         if (
+#                 sr_mate1.interval1.chrom == sr_mate2.interval1.chrom and sr_mate1.interval2.chrom == sr_mate2.interval2.chrom) or (
+#                 sr_mate1.interval2.chrom == sr_mate2.interval1.chrom and sr_mate1.interval1.chrom == sr_mate2.interval2.chrom):
+#             if (
+#                     sr_mate1.clipped1 == sr_mate2.clipped1 and sr_mate1.clipped2 == sr_mate2.clipped2) or (
+#                     sr_mate1.clipped2 == sr_mate2.clipped1 and sr_mate1.clipped1 == sr_mate2.clipped2):
+#                 points1 = sr_mate1.get_points()
+#                 points2 = sr_mate2.get_points()
+#                 if (points1[0].similar(points2[1]) and points1[1].similar(points2[0])) or (
+#                         points1[0].similar(points2[0]) and points1[1].similar(points2[1])):
+#                     removes.append(sr_mate2)
+#     split_read_mates = [split_read_mate for split_read_mate in split_read_mates
+#                         if split_read_mate not in removes]
+#     return split_read_mates
 
 
 # on 7125 split_read_mates, cost time decrease from 81s to 2s

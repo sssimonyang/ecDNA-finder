@@ -11,7 +11,7 @@ samtools sort -n -@ {threads_num} -o {queryname-sorted} {coordinate-sorted}
 - pandas
 - pysam
 
-> all can be easy installed by pip or conda
+> All can be easy installed by pip or conda
 
 ### Run
 Run simply
@@ -20,23 +20,18 @@ python main.py -coord {coordinate-sorted} -query {queryname-sorted} -dir {dirnam
 ```
 
 ### Other important params you may need
--peak : default 1. You can give it a number to remove seed intervals the depth of which is lower than peak_value. 
-Higher the value, shorter the run time, and meantime, the results may decrease.
-
--mate : default False. You can add the param to make the value True.
-Then the software will use value calculated by sequencing_depth/20 to remove split read mate 
-that support reads of which is lower than the calculated value. 
-
-> when handling with high coverage(>50X) WGS data. Give peak value and make mate True Recommended.
+-cutoff : the default value of cutoff is 0, which means use the round(depth_average / 20) to cutoff peak and split read mate.
+The depth_average is calculated automatically. Certainly, the mininum allowable value is 1. YOU can provide this value to change the result.
+BUT the amount oHf time spent varies accordingly.
 
 ### Results
-Results is placed in a new directory named dirname in the current directory.
-The circ_results.tsv is a tab-delimiter file which is the most important.
+Results is placed in a new directory named {dirname} in the current directory.
+The circ_results.tsv is a tab-delimiter file.
 
-### help guide
+### elp guide
 ```
 usage: main.py [-h] -coord COORDINATE -query QUERYNAME -dir DIRNAME
-               [-peak PEAK] [-mate]
+                   [-cutoff CUTOFF]
 
 ecDNA-finder
 
@@ -48,9 +43,8 @@ optional arguments:
                         bam file sorted by queryname
   -dir DIRNAME, --dirname DIRNAME
                         result directory
-  -peak PEAK, --peak PEAK
-                        seed interval value cutoff
-  -mate, --mate         mate support read cutoff
+  -cutoff CUTOFF, --cutoff CUTOFF
+                        seed interval cutoff and support read cutoff
 ```
 
 ### Pbs_file
@@ -72,7 +66,7 @@ dirname=SRR8236745
 cd /public/home/zhangjing1/yangjk/ecDNA/result/
 coordinate=/public/home/zhangjing1/yangjk/data/bam/${dirname}/sorted_coordinate.bam
 queryname=/public/home/zhangjing1/yangjk/data/bam/${dirname}/sorted_query_name.bam
-/public/home/liuxs/anaconda3/envs/ecDNA/bin/python /public/home/zhangjing1/yangjk/ecDNA/code/main.py -coord ${coordinate} -query ${queryname} -dir ${dirname} -peak 3 -mate
+/public/home/liuxs/anaconda3/envs/ecDNA/bin/python /public/home/zhangjing1/yangjk/ecDNA/code/main.py -coord ${coordinate} -query ${queryname} -dir ${dirname}
 end='-------------END-------------'$(date "+%Y %h %d %H:%M:%S")'-------------END-------------'
 echo $end
 echo $end >&2

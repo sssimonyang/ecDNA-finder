@@ -99,7 +99,7 @@ class ECDNA:
             else:
                 long_interval.start = extend_interval.start
             long_interval.extend_depth.append(extend_depth)
-            yield (long_interval, other_index_intervals, circ_intervals, support_mates, None)
+            yield long_interval, other_index_intervals, circ_intervals, support_mates, None
         else:
             if long_interval.clipped == "right":
                 whole_interval = utils.WholeInterval(chrom=long_interval.chrom, start=long_interval.start,
@@ -113,7 +113,7 @@ class ECDNA:
             if len(long_interval.extend_depth) > 1:
                 long_interval.extend_depth = long_interval.extend_depth[:-1]
             self.left_right_depth(whole_interval)
-            yield (None, None, circ_intervals + [whole_interval], support_mates, None)
+            yield None, None, circ_intervals + [whole_interval], support_mates, None
 
     def shorten(self, long_interval):
         if long_interval.clipped == 'left':

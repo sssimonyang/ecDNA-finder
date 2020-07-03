@@ -23,7 +23,8 @@ parser = argparse.ArgumentParser(description="ecDNA-finder")
 parser.add_argument('-coord', '--coordinate', help='bam file sorted by coordinate', required=True)
 parser.add_argument('-query', '--queryname', help='bam file sorted by queryname', required=True)
 parser.add_argument('-dir', '--dirname', help='result directory', required=True)
-parser.add_argument('-cutoff', '--cutoff', help='seed interval cutoff and support read cutoff', required=False, default=0, type=int)
+parser.add_argument('-cutoff', '--cutoff', help='seed interval cutoff and support read cutoff', required=False,
+                    default=0, type=int)
 args = parser.parse_args()
 
 # prepare
