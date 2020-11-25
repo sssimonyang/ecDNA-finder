@@ -1,8 +1,10 @@
-This software is a modification and improvement of [CircleMap](https://github.com/iprada/Circle-Map) which is under MIT license to detect ecDNA from WGS bam file.
+Ecdna-finder is a modification and improvement of [CircleMap](https://github.com/iprada/Circle-Map) which is under MIT license.
 
-extract.py utils.py mates.py is an modification of CircleMap/circlemap/extract_circle_SV_reads.py CircleMap/circlemap/utils.py CircleMap/circlemap/repeats.py respectively.
+The idea of ecdna-finder is halfly the same as CircleMap. Ecdna-finder reuses the idea of CircleMap and modifies it to detect ecDNA(bigger than eccDNA which is the focus of CircleMap) efficiently.
 
-Thanks to @iprada for developing circelmap and facilitate my development of ecDNA-finder.
+Three files influding extract.py, utils.py, mates.py is a modification of extract_circle_SV_reads.py,utils.py,repeats.py respectively in CircleMap/circlemap/.
+
+Thanks to [@iprada](https://github.com/iprada) for developing CircleMap and it totally facilitates my development of ecDNA-finder.
 
 
 ### Prepare
